@@ -1,0 +1,14 @@
+[Unit]
+Description=AdGuard Home
+After=network-online.target
+Wants=network-online.target
+ConditionFileIsExecutable=/opt/AdGuardHome/AdGuardHome
+
+[Service]
+WorkingDirectory=/opt/AdGuardHome
+ExecStart=/opt/AdGuardHome/AdGuardHome -c /opt/AdGuardHome/AdGuardHome.yaml -w /opt/AdGuardHome -s run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

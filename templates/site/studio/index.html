@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__SITE_TITLE__ — дизайн и разработка</title>
+<meta name="description" content="Небольшая студия: сайты, интерфейсы и техническая поддержка.">
+<style>
+  :root { --ink: #1c2430; --muted: #5d6b7c; --line: #dfe5ec; --accent: #1f6feb; --bg: #fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 24px 0; font-weight: 700; }
+  .hero { padding: 72px 0 56px; }
+  h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.12; margin: 0 0 18px; }
+  .hero p { max-width: 620px; color: var(--muted); font-size: 20px; margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding-bottom: 64px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 22px; }
+  .card h2 { font-size: 19px; margin: 0 0 8px; }
+  .card p { color: var(--muted); margin: 0; font-size: 16px; }
+  footer { border-top: 1px solid var(--line); padding: 24px 0; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>__SITE_TITLE__</header>
+  <section class="hero">
+    <h1>Делаем сайты, которые просто работают</h1>
+    <p>Небольшая команда: проектируем интерфейсы, пишем код и поддерживаем проекты после запуска.</p>
+  </section>
+  <section class="grid">
+    <div class="card"><h2>Дизайн</h2><p>Понятные интерфейсы для сайтов и внутренних сервисов.</p></div>
+    <div class="card"><h2>Разработка</h2><p>Быстрые сайты и аккуратная интеграция с вашими системами.</p></div>
+    <div class="card"><h2>Поддержка</h2><p>Обновления, мониторинг и резервные копии.</p></div>
+  </section>
+  <footer>© __SITE_TITLE__</footer>
+</div>
+</body>
+</html>

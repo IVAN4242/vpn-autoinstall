@@ -1,0 +1,27 @@
+[Unit]
+Description=VPN Telegram Bot
+After=network-online.target x-ui.service
+Wants=network-online.target
+
+[Service]
+User=vpnbot
+Group=vpnbot
+WorkingDirectory=__BOT_DIR__
+EnvironmentFile=/etc/vpnbot.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__BOT_DIR__/venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+# Боту нужны только сеть и его собственный список пользователей.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/vpnbot
+
+[Install]
+WantedBy=multi-user.target

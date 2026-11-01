@@ -1,0 +1,13 @@
+# Секреты и данные пользователей никогда не должны попасть в публичный репозиторий
+.env
+*.env
+!.env.example
+users.json
+users.json.bak
+*.pem
+*.key
+*.db
+
+venv/
+__pycache__/
+*.pyc
