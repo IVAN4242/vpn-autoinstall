@@ -231,20 +231,31 @@ public_ipv4() {
     return 1
 }
 
+dns_a_records() {
+    dig +short +time=3 +tries=1 A "$VK_DOMAIN" "$@" 2>/dev/null | sort -u | grep -E '^[0-9]+(\.[0-9]+){3}$'
+}
+
+# Не через getent: он читает /etc/hosts раньше DNS, а на многих VPS
+# имя хоста там записано как 127.0.1.1. Сертификат выдаётся по публичной записи.
+domain_a_records() {
+    dns_a_records @1.1.1.1 || dns_a_records @8.8.8.8 || dns_a_records
+}
+
 check_dns() {
-    local server_ip resolved
+    local server_ip resolved shown
     server_ip=$(public_ipv4) || {
         warn "Не удалось определить внешний IP, проверка DNS пропущена."
         return 0
     }
     while true; do
-        resolved=$(getent ahostsv4 "$VK_DOMAIN" | awk 'NR==1 {print $1}') || resolved=""
+        resolved=$(domain_a_records) || resolved=""
         if [[ "$resolved" == "$server_ip" ]]; then
             VK_SERVER_IP=$server_ip
             ok "DNS: $VK_DOMAIN указывает на этот сервер ($server_ip)"
             return 0
         fi
-        warn "$VK_DOMAIN указывает на «${resolved:-ничего}», а IP сервера — $server_ip."
+        shown=${resolved//$'\n'/, }
+        warn "$VK_DOMAIN указывает на «${shown:-ничего}», а IP сервера — $server_ip."
         warn "Нужна A-запись на этот IP. При Cloudflare выключите проксирование (серое облако)."
         ((ASSUME_YES)) && die "DNS не настроен, сертификат выпустить не получится."
         confirm "Подождать и проверить ещё раз?" y || die "Настройте DNS и запустите скрипт снова."
@@ -904,7 +915,7 @@ main() {
     bootstrap_repo "$@"
 
     printf '%s%sУстановка 3x-ui и Telegram-бота%s\n' "$C_BLUE" "$C_BOLD" "$C_OFF"
-    apt_install curl iproute2 ca-certificates python3
+    apt_install curl iproute2 ca-certificates python3 bind9-dnsutils
     BOT_USERNAME=""
     if ((RERUN)); then
         load_state
