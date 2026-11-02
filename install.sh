@@ -48,6 +48,7 @@ SYSCTL_FILE="/etc/sysctl.d/90-vpn-tuning.conf"
 ASSUME_YES=0
 RERUN=0
 CURRENT_STEP="подготовка"
+QUIET_FAILED_FROM=""
 
 C_RED=$'\033[0;31m'
 C_GREEN=$'\033[0;32m'
@@ -61,6 +62,7 @@ ok() { printf '%s✓%s %s\n' "$C_GREEN" "$C_OFF" "$*"; }
 warn() { printf '%s! %s%s\n' "$C_YELLOW" "$*" "$C_OFF" >&2; }
 die() {
     printf '%s✗ %s%s\n' "$C_RED" "$*" "$C_OFF" >&2
+    show_quiet_failure
     exit 1
 }
 step() {
@@ -71,6 +73,7 @@ step() {
 on_error() {
     local code=$?
     printf '%s✗ Сбой на шаге «%s» (код %s).%s\n' "$C_RED" "$CURRENT_STEP" "$code" "$C_OFF" >&2
+    show_quiet_failure
     printf 'Подробности: %s. Исправьте причину и запустите скрипт ещё раз: готовые шаги повторятся без потери данных.\n' "$LOG_FILE" >&2
     exit "$code"
 }
@@ -80,7 +83,27 @@ init_log() {
     touch "$LOG_FILE"
     chmod 600 "$LOG_FILE"
 }
-quiet() { "$@" >>"$LOG_FILE" 2>&1; }
+quiet() {
+    local start code=0
+    start=$(wc -l 2>/dev/null <"$LOG_FILE") || start=0
+    "$@" >>"$LOG_FILE" 2>&1 || code=$?
+    QUIET_FAILED_FROM=""
+    ((code == 0)) || QUIET_FAILED_FROM=$((start + 1))
+    return "$code"
+}
+
+# Показывает причину сбоя последней команды из quiet: строки с ошибками, а если их нет, конец её вывода.
+show_quiet_failure() {
+    [[ -n "$QUIET_FAILED_FROM" ]] || return 0
+    local output lines
+    output=$(tail -n "+$QUIET_FAILED_FROM" "$LOG_FILE" 2>/dev/null) || return 0
+    lines=$(grep -iE '(^|[^a-z])(error|fatal|failed)' <<<"$output" | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++' | tail -n 12) || lines=""
+    [[ -n "$lines" ]] || lines=$(tail -n 15 <<<"$output")
+    [[ -n "$lines" ]] || return 0
+    printf 'Вывод команды:\n' >&2
+    cut -c1-200 <<<"$lines" | sed 's/^/  /' >&2
+    printf 'Полный журнал: %s\n' "$LOG_FILE" >&2
+}
 
 rand_alnum() {
     local length=$1 value

@@ -1,2 +1,5 @@
-aiogram==3.21.0
-aiohttp==3.12.15
+aiogram==3.31.0; python_version >= "3.10"
+aiohttp==3.14.5; python_version >= "3.10"
+# Debian 11: Python 3.9 новые версии уже не поддерживают.
+aiogram==3.21.0; python_version < "3.10"
+aiohttp==3.12.15; python_version < "3.10"
