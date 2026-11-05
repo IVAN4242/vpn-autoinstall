@@ -285,5 +285,6 @@ def link_kind(link):
     if scheme == 'hysteria2' and rest:
         return 'hysteria2-obfs' if 'obfs' in query else 'hysteria2'
     if scheme == 'vless' and rest:
-        return 'vless-xhttp' if query.get('type') == ['xhttp'] else 'vless-vision'
+        transport = (query.get('type') or [''])[0]
+        return {'xhttp': 'vless-xhttp', 'ws': 'vless-ws'}.get(transport, 'vless-vision')
     return None

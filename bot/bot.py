@@ -56,6 +56,7 @@ LINK_LABELS = {
     'hysteria2-obfs': 'Hysteria2 с обфускацией salamander (UDP)',
     'vless-vision': 'VLESS Vision (TCP) — если UDP не работает',
     'vless-xhttp': 'VLESS XHTTP (TCP)',
+    'vless-ws': 'VLESS WebSocket (TCP)',
 }
 LINK_ORDER = list(LINK_LABELS)
 

@@ -381,6 +381,7 @@ collect_settings() {
         "Нужен порт от 1 до 65535 или 0."
     ask VK_TLS_PORT "TCP-порт сайта и VLESS" "443" is_port "Нужен порт от 1 до 65535."
     ask VK_XHTTP "Создать ещё VLESS XHTTP? (y/n)" "y"
+    ask VK_WS "Создать ещё VLESS WebSocket? (y/n)" "y"
     ask VK_PANEL_PORT "TCP-порт панели 3x-ui" "$(shuf -i 20000-59999 -n 1)" is_port "Нужен порт от 1 до 65535."
     ask VK_PANEL_USER "Логин панели" "$(rand_alnum 10)" is_credential "4–64 символа: латиница, цифры, «.», «_», «-»."
     ask VK_PANEL_PASS "Пароль панели" "$(rand_alnum 24)" is_credential "4–64 символа: латиница, цифры, «.», «_», «-»."
@@ -408,6 +409,12 @@ collect_settings() {
     if [[ "$VK_XHTTP" =~ ^[YyДд] ]]; then
         VK_XHTTP_PATH="/$(rand_alnum 10)"
     fi
+    VK_WS_PATH=""
+    if [[ "$VK_WS" =~ ^[YyДд] ]]; then
+        pick_ws_settings
+    else
+        VK_WS_LOCAL_PORT=""
+    fi
 
     require_free_port tcp 80
     require_free_port tcp "$VK_TLS_PORT"
@@ -420,7 +427,7 @@ collect_settings() {
     info "${C_BOLD}Будет установлено:${C_OFF}"
     info "  Сайт:           https://$VK_DOMAIN$(tls_port_suffix)"
     info "  Hysteria2:      UDP $VK_HY2_PORT${VK_HY2_OBFS_PORT:+, UDP $VK_HY2_OBFS_PORT (salamander)}"
-    info "  VLESS Vision:   TCP $VK_TLS_PORT${VK_XHTTP_PATH:+; VLESS XHTTP на том же порту}"
+    info "  VLESS Vision:   TCP $VK_TLS_PORT${VK_XHTTP_PATH:+; VLESS XHTTP на том же порту}${VK_WS_PATH:+; VLESS WebSocket на том же порту}"
     info "  Панель 3x-ui:   $VK_XUI_VERSION, TCP $VK_PANEL_PORT, скрытый путь"
     if adguard_enabled; then
         info "  AdGuard Home:   $ADGUARD_VERSION, панель на TCP $VK_ADGUARD_PORT"
@@ -433,6 +440,16 @@ collect_settings() {
     save_state
 }
 
+# Случайные путь и локальный порт инбаунда WebSocket.
+pick_ws_settings() {
+    VK_WS=y
+    VK_WS_PATH="/$(rand_alnum 10)"
+    VK_WS_LOCAL_PORT=${VK_WS_LOCAL_PORT:-$(shuf -i 10000-19999 -n 1)}
+    while [[ "$VK_WS_LOCAL_PORT" == "${VK_XHTTP_LOCAL_PORT:-}" ]] || port_busy tcp "$VK_WS_LOCAL_PORT"; do
+        VK_WS_LOCAL_PORT=$(shuf -i 10000-19999 -n 1)
+    done
+}
+
 adguard_enabled() { [[ "$VK_ADGUARD" =~ ^[YyДд] ]]; }
 bot_enabled() { [[ "$VK_BOT" =~ ^[YyДд] ]]; }
 
@@ -442,7 +459,7 @@ tls_port_suffix() {
 
 STATE_VARS=(
     VK_DOMAIN VK_ACME_EMAIL VK_BOT VK_BOT_TOKEN VK_ADMIN_IDS VK_NEW_USER_DAYS VK_SITE_CHOICE VK_SITE_TITLE
-    VK_HY2_PORT VK_HY2_OBFS_PORT VK_TLS_PORT VK_XHTTP VK_XHTTP_PATH VK_XHTTP_LOCAL_PORT
+    VK_HY2_PORT VK_HY2_OBFS_PORT VK_TLS_PORT VK_XHTTP VK_XHTTP_PATH VK_XHTTP_LOCAL_PORT VK_WS VK_WS_PATH VK_WS_LOCAL_PORT
     VK_PANEL_PORT VK_PANEL_USER VK_PANEL_PASS VK_WEB_PATH VK_XUI_VERSION VK_UFW VK_TUNING
     VK_ADGUARD VK_ADGUARD_PORT VK_ADGUARD_PASS VK_SERVER_IP VK_API_TOKEN
 )
@@ -470,11 +487,13 @@ wants_component() {
 
 load_state() {
     # Файл состояния перезапишет переменные, поэтому заданные при запуске значения сохраняем.
-    local want_bot=${VK_BOT:-} want_adguard=${VK_ADGUARD:-}
+    local want_bot=${VK_BOT:-} want_adguard=${VK_ADGUARD:-} want_ws=${VK_WS:-}
     local token=${VK_BOT_TOKEN:-} admins=${VK_ADMIN_IDS:-} days=${VK_NEW_USER_DAYS:-}
     local adguard_port=${VK_ADGUARD_PORT:-} adguard_pass=${VK_ADGUARD_PASS:-}
     # shellcheck disable=SC1090
     . "$STATE_FILE"
+    # В состоянии установок прошлых версий настроек WebSocket нет.
+    VK_WS=${VK_WS:-n} VK_WS_PATH=${VK_WS_PATH:-} VK_WS_LOCAL_PORT=${VK_WS_LOCAL_PORT:-}
     info "Найдена предыдущая установка для ${C_BOLD}$VK_DOMAIN${C_OFF}."
     info "Панель, пользователи и ссылки сохранятся. Во время работы скрипта VPN ненадолго прервётся."
     echo
@@ -488,6 +507,13 @@ load_state() {
         collect_adguard_settings
         check_adguard_ports
         [[ -n "$VK_SERVER_IP" ]] || VK_SERVER_IP=$(public_ipv4) || VK_SERVER_IP=""
+    fi
+    if [[ -z "$VK_WS_PATH" ]]; then
+        if wants_component "$want_ws" "Добавить VLESS WebSocket?"; then
+            pick_ws_settings
+        else
+            VK_WS=n VK_WS_LOCAL_PORT=""
+        fi
     fi
 
     confirm "Продолжить?" y || die "Отменено, сервер не изменён."
@@ -550,7 +576,7 @@ nginx_listen_adguard() {
 
 setup_site() {
     step "Сайт для маскировки и nginx"
-    local web_root="/var/www/$VK_DOMAIN" template xhttp_block=""
+    local web_root="/var/www/$VK_DOMAIN" template xhttp_block="" ws_block=""
     case "$VK_SITE_CHOICE" in
         2) template=notes ;;
         3) template=minimal ;;
@@ -570,10 +596,16 @@ setup_site() {
                 "XHTTP_PATH=$VK_XHTTP_PATH" "XHTTP_LOCAL_PORT=$VK_XHTTP_LOCAL_PORT"
         )
     fi
+    if [[ -n "$VK_WS_PATH" ]]; then
+        ws_block=$(
+            render "$SOURCE_DIR/templates/nginx-ws.location" /dev/stdout \
+                "WS_PATH=$VK_WS_PATH" "WS_LOCAL_PORT=$VK_WS_LOCAL_PORT"
+        )
+    fi
     render "$SOURCE_DIR/templates/nginx-site.snippet" "$NGINX_SNIPPET" "WEB_ROOT=$web_root"
     render "$SOURCE_DIR/templates/nginx-selfsteal.conf" "$NGINX_SITE" \
         "SOCKET_H1=$SOCKET_H1" "LISTEN_H2=$(nginx_listen_h2)" "DOMAIN=$VK_DOMAIN" \
-        "XHTTP_LOCATION=$xhttp_block" "ACME_ROOT=$ACME_ROOT" "TLS_PORT_SUFFIX=$(tls_port_suffix)"
+        "XHTTP_LOCATION=$xhttp_block" "WS_LOCATION=$ws_block" "ACME_ROOT=$ACME_ROOT" "TLS_PORT_SUFFIX=$(tls_port_suffix)"
     ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/selfsteal
     rm -f /etc/nginx/sites-enabled/default
 
@@ -738,6 +770,7 @@ provision_inbounds() {
         VK_DOMAIN="$VK_DOMAIN" VK_API_TOKEN="$VK_API_TOKEN" \
         VK_HY2_PORT="$VK_HY2_PORT" VK_HY2_OBFS_PORT="$VK_HY2_OBFS_PORT" VK_TLS_PORT="$VK_TLS_PORT" \
         VK_XHTTP_PATH="$VK_XHTTP_PATH" VK_XHTTP_LOCAL_PORT="$VK_XHTTP_LOCAL_PORT" \
+        VK_WS_PATH="$VK_WS_PATH" VK_WS_LOCAL_PORT="$VK_WS_LOCAL_PORT" \
         python3 "$SOURCE_DIR/scripts/provision_inbounds.py" || die "Не удалось создать инбаунды."
     # Xray собирает config.json при запуске: так ловятся ошибки в настройках fallback.
     quiet systemctl restart x-ui
@@ -858,6 +891,9 @@ verify_install() {
     fi
     if [[ -n "$VK_XHTTP_PATH" ]]; then
         check_item "XHTTP слушает локальный порт" port_busy tcp "$VK_XHTTP_LOCAL_PORT"
+    fi
+    if [[ -n "$VK_WS_PATH" ]]; then
+        check_item "WebSocket слушает локальный порт" port_busy tcp "$VK_WS_LOCAL_PORT"
     fi
     if adguard_enabled; then
         check_item "сервис AdGuardHome работает" systemctl is-active AdGuardHome
