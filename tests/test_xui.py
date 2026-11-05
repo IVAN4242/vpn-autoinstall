@@ -20,6 +20,7 @@ class LinkKindTest(unittest.TestCase):
             'hysteria2://a@d.com:2096?obfs=salamander&obfs-password=p&sni=d.com#x': 'hysteria2-obfs',
             'vless://u@d.com:443?flow=xtls-rprx-vision&security=tls&type=tcp#x': 'vless-vision',
             'vless://u@d.com:443?mode=stream-up&path=%2Fa&security=tls&type=xhttp#x': 'vless-xhttp',
+            'vless://u@d.com:443?path=%2Fa&security=tls&type=ws#x': 'vless-ws',
             'trojan://p@d.com:443#x': None,
             '': None,
         }

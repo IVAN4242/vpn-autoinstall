@@ -154,22 +154,34 @@ def xhttp_inbound(remark, port, path, domain):
     return inbound_body(remark, port, 'vless', settings, stream, domain, listen='127.0.0.1')
 
 
-def ensure_xhttp_host(panel, inbound_id, domain, public_port):
+def ws_inbound(remark, port, path, domain):
+    # Как и у XHTTP: TLS завершает Xray на Vision-инбаунде, сюда запрос приходит от nginx.
+    stream = {
+        'network': 'ws',
+        'wsSettings': {'acceptProxyProtocol': False, 'path': path, 'host': '', 'headers': {}, 'heartbeatPeriod': 0},
+        'security': 'none',
+        'sockopt': {'trustedXForwardedFor': ['X-Real-IP']},
+    }
+    settings = {'clients': [], 'decryption': 'none'}
+    return inbound_body(remark, port, 'vless', settings, stream, domain, listen='127.0.0.1')
+
+
+def ensure_public_host(panel, inbound_id, remark, alpn, domain, public_port):
     """Клиент ходит на публичный TLS-порт, а не на внутренний порт инбаунда."""
     answer = panel.call('GET', f'/panel/api/hosts/byInbound/{inbound_id}')
     if answer.get('obj'):
         return
     created = panel.call('POST', '/panel/api/hosts/add', {
-        'remark': 'public-tls',
+        'remark': remark,
         'inboundIds': [inbound_id],
         'hosts': [f'{domain}:{public_port}'],
         'security': 'tls',
         'sni': domain,
-        'alpn': ['h2'],
+        'alpn': alpn,
         'fingerprint': FINGERPRINT,
     })
     if not created.get('success'):
-        raise PanelError(f'Не удалось создать публичный адрес XHTTP: {created.get("msg")}')
+        raise PanelError(f'Не удалось создать публичный адрес {remark}: {created.get("msg")}')
 
 
 def apply_adguard_dns(template):
@@ -260,10 +272,16 @@ def main():
         f'vless-vision-{public_port}', public_port, domain, certificates,
         env('VK_SOCKET_H1'), env('VK_SOCKET_H2'),
     ))
-    xhttp_remark = 'vless-xhttp'
+    # Инбаунд за nginx -> публичный адрес и ALPN: nginx принимает XHTTP по HTTP/2, а WebSocket по HTTP/1.1.
+    public_hosts = {}
     xhttp_path = os.environ.get('VK_XHTTP_PATH') or ''
     if xhttp_path:
-        wanted.append(xhttp_inbound(xhttp_remark, env('VK_XHTTP_LOCAL_PORT'), xhttp_path, domain))
+        wanted.append(xhttp_inbound('vless-xhttp', env('VK_XHTTP_LOCAL_PORT'), xhttp_path, domain))
+        public_hosts['vless-xhttp'] = ('public-tls', ['h2'])
+    ws_path = os.environ.get('VK_WS_PATH') or ''
+    if ws_path:
+        wanted.append(ws_inbound('vless-ws', env('VK_WS_LOCAL_PORT'), ws_path, domain))
+        public_hosts['vless-ws'] = ('public-tls-ws', ['http/1.1'])
 
     for body in wanted:
         if body['remark'] in existing:
@@ -274,9 +292,10 @@ def main():
             raise PanelError(f'{body["remark"]}: {answer.get("msg")}')
         print(f'  + {body["remark"]}: порт {body["port"]}')
 
-    if xhttp_path:
+    if public_hosts:
         created = {inbound.get('remark'): inbound for inbound in panel.inbounds()}
-        ensure_xhttp_host(panel, int(created[xhttp_remark]['id']), domain, public_port)
+        for remark, (host_remark, alpn) in public_hosts.items():
+            ensure_public_host(panel, int(created[remark]['id']), host_remark, alpn, domain, public_port)
 
     if os.environ.get('VK_ADGUARD_DNS') == '1':
         ensure_adguard_dns(panel)
